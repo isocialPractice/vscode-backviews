@@ -22,6 +22,7 @@ As for the name: a VSCode extension is expected to contribute a view or two. The
 do not end.
 
 - [Installation](#installation)
+- [Browser Demo](#browser-demo)
 - [Getting Started](#getting-started)
 - [Game Play](#game-play)
 - [Settings](#settings)
@@ -63,6 +64,32 @@ media/webview.js    in-panel game bundle
 
 To rebuild continuously while developing, use `npm run watch`. To regenerate `media/icon.png`
 from the vector mark, use `npm run icons`.
+
+## Browser Demo
+
+A standalone browser version is available at [isocialpractice.github.io/vscode-backviews](https://isocialpractice.github.io/vscode-backviews/).
+
+To run the browser demo locally:
+
+1. Build the webview bundle (as described in Installation above)
+2. Serve the project directory with any web server:
+   ```bash
+   # Using PHP
+   php -S localhost:9090
+   
+   # Using Python
+   python -m http.server 9090
+   
+   # Using Node.js http-server
+   npx http-server -p 9090
+   ```
+3. Open `http://localhost:9090` in your browser
+4. Click the view to capture the mouse and start exploring
+
+The browser version automatically deploys via GitHub Actions whenever changes are pushed to the main branch. The workflow:
+- Checks out both `vscode-backviews` and `cmd-backedges` repositories
+- Runs `npm install && npm run build` to generate `media/webview.js`
+- Deploys `index.html`, `media/`, and `materials/` folders to GitHub Pages
 
 ## Getting Started
 

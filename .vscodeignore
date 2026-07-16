@@ -1,0 +1,15 @@
+.vscode/**
+.github/**
+.claude/**
+.tmp/**
+src/**
+scripts/**
+node_modules/**
+build.mjs
+tsconfig.json
+**/*.map
+**/*.lnk
+.gitignore
+task.bat
+*.code-workspace
+.support/**

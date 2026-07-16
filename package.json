@@ -1,0 +1,191 @@
+{
+  "name": "vscode-backviews",
+  "displayName": "BackViews",
+  "description": "First-person backrooms explorer rendered inside a VSCode webview, driven by the cmd-backedges infinite maze generation API.",
+  "version": "0.0.0-alpha",
+  "publisher": "isocialPractice",
+  "author": "John Haugabook",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/isocialPractice/vscode-backviews.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "backrooms",
+    "game",
+    "webview",
+    "procedural-generation",
+    "maze"
+  ],
+  "icon": "media/icon.png",
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "backviews.open",
+        "title": "Enter the Backrooms",
+        "category": "BackViews"
+      },
+      {
+        "command": "backviews.relocate",
+        "title": "Relocate (New Seed)",
+        "category": "BackViews"
+      }
+    ],
+    "configuration": {
+      "title": "BackViews",
+      "properties": {
+        "backviews.seed": {
+          "type": "number",
+          "default": 0,
+          "description": "Maze seed. The same seed always produces the same backrooms. 0 picks a random seed each time the panel opens."
+        },
+        "backviews.moveSpeed": {
+          "type": "number",
+          "default": 2.2,
+          "minimum": 0.5,
+          "maximum": 6,
+          "description": "Walking speed in cells per second."
+        },
+        "backviews.renderDistance": {
+          "type": "number",
+          "default": 14,
+          "minimum": 6,
+          "maximum": 28,
+          "description": "How many cells around the player are meshed and drawn."
+        },
+        "backviews.cameraShake": {
+          "type": "boolean",
+          "default": true,
+          "description": "Handheld camera sway and walking head-bob."
+        },
+        "backviews.filmGrain": {
+          "type": "boolean",
+          "default": true,
+          "description": "Grainy 1990 camcorder footage overlay (grain, vignette, tracking noise)."
+        },
+        "backviews.vhsHud": {
+          "type": "boolean",
+          "default": true,
+          "description": "Camcorder HUD: blinking REC dot, timestamp, and tape mode indicator."
+        },
+        "backviews.furniture": {
+          "type": "boolean",
+          "default": true,
+          "description": "Render the random furniture and columns the generator places in open cells."
+        },
+        "backviews.wallpaperShifts": {
+          "type": "boolean",
+          "default": false,
+          "description": "Wallpaper changes tint and pattern inside randomly shaped enclosed zones."
+        },
+        "backviews.mouseLook": {
+          "type": "boolean",
+          "default": true,
+          "description": "Click the view to capture the mouse and look around. Q/E always rotate."
+        },
+        "backviews.invertTurn": {
+          "type": "boolean",
+          "default": false,
+          "description": "Flip turn direction for the mouse and turn keys."
+        },
+        "backviews.invertStrafe": {
+          "type": "boolean",
+          "default": false,
+          "description": "Flip strafe left/right."
+        },
+        "backviews.invertForward": {
+          "type": "boolean",
+          "default": false,
+          "description": "Flip forward/back."
+        },
+        "backviews.materialPreset": {
+          "type": "string",
+          "enum": ["classic", "office", "pool", "concrete", "panel"],
+          "enumDescriptions": [
+            "Yellow wallpaper mix driven by the generator's per-edge surface types",
+            "Plain drywall everywhere",
+            "Ceramic tile walls with a cool cast",
+            "Bare concrete walls",
+            "Wood paneling everywhere"
+          ],
+          "default": "classic",
+          "description": "Pre-built wall material set."
+        },
+        "backviews.materialHueShift": {
+          "type": "number",
+          "default": 0,
+          "minimum": -180,
+          "maximum": 180,
+          "description": "Rotate the wall material hue, in degrees."
+        },
+        "backviews.materialBrightness": {
+          "type": "number",
+          "default": 1,
+          "minimum": 0.6,
+          "maximum": 1.4,
+          "description": "Wall material brightness multiplier."
+        },
+        "backviews.monsterEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Something else walks these halls."
+        },
+        "backviews.monsterSpeed": {
+          "type": "number",
+          "default": 2.6,
+          "minimum": 0.5,
+          "maximum": 5,
+          "description": "Monster speed in cells per second."
+        },
+        "backviews.monsterSpawnMin": {
+          "type": "number",
+          "default": 1,
+          "minimum": 0.1,
+          "maximum": 10,
+          "description": "Earliest monster spawn, in minutes after the world starts."
+        },
+        "backviews.monsterSpawnMax": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0.5,
+          "maximum": 15,
+          "description": "Latest monster spawn, in minutes after the world starts."
+        },
+        "backviews.monsterForm": {
+          "type": "string",
+          "enum": ["spider", "humanoid", "cloud", "random"],
+          "enumDescriptions": [
+            "Low, wide, and many-legged",
+            "Tall and almost person-shaped",
+            "A drifting dark mass",
+            "A different form every spawn"
+          ],
+          "default": "random",
+          "description": "Monster body plan."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "icons": "node scripts/make-icon.mjs",
+    "pre:publish": "vsce package",
+    "vscode:prepublish": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.9.0"
+  }
+}

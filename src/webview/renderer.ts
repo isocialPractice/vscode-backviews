@@ -75,6 +75,49 @@ void main() {
 }
 `;
 
+// Decal pass for wall writing: plain UVs into a dedicated RGBA texture,
+// alpha-blended over the walls after the opaque passes.
+export const FLOATS_PER_DECAL_VERTEX = 6;
+
+const DECAL_VERTEX_SRC = `
+attribute vec3 aPosition;
+attribute vec2 aUv;
+attribute float aShade;
+
+uniform mat4 uViewProj;
+uniform vec3 uCamPos;
+
+varying vec2 vUv;
+varying float vShade;
+varying float vDist;
+
+void main() {
+  vUv = aUv;
+  vShade = aShade;
+  vDist = distance(aPosition, uCamPos);
+  gl_Position = uViewProj * vec4(aPosition, 1.0);
+}
+`;
+
+const DECAL_FRAGMENT_SRC = `
+precision mediump float;
+
+uniform sampler2D uTexture;
+uniform float uFogDensity;
+uniform float uFlicker;
+
+varying vec2 vUv;
+varying float vShade;
+varying float vDist;
+
+void main() {
+  vec4 tex = texture2D(uTexture, vUv);
+  float fog = 1.0 - exp(-vDist * vDist * uFogDensity);
+  // Ink dims with the wall lighting and dissolves into the fog.
+  gl_FragColor = vec4(tex.rgb * vShade * uFlicker, tex.a * (1.0 - fog));
+}
+`;
+
 export interface ChunkMesh {
   vbo: WebGLBuffer;
   ibo: WebGLBuffer;
@@ -111,6 +154,16 @@ export class Renderer {
   private readonly atlasCanvas: HTMLCanvasElement;
   private readonly atlasTexture: WebGLTexture | null;
 
+  // Wall-writing decals: separate program, texture, and mesh, rebuilt only
+  // when a new line is scrawled.
+  private readonly decalProgram: WebGLProgram;
+  private readonly decalUniforms: Record<string, WebGLUniformLocation | null>;
+  private readonly decalAttribs: Record<string, number>;
+  private decalTexture: WebGLTexture | null = null;
+  private decalVbo: WebGLBuffer | null = null;
+  private decalIbo: WebGLBuffer | null = null;
+  private decalCount = 0;
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     const gl = canvas.getContext('webgl', { antialias: true, alpha: false });
@@ -130,6 +183,17 @@ export class Renderer {
     this.uniforms = {};
     for (const name of ['uViewProj', 'uCamPos', 'uAtlas', 'uFogColor', 'uFogDensity', 'uFlicker']) {
       this.uniforms[name] = gl.getUniformLocation(this.program, name);
+    }
+
+    this.decalProgram = buildProgram(gl, DECAL_VERTEX_SRC, DECAL_FRAGMENT_SRC);
+    this.decalAttribs = {
+      aPosition: gl.getAttribLocation(this.decalProgram, 'aPosition'),
+      aUv: gl.getAttribLocation(this.decalProgram, 'aUv'),
+      aShade: gl.getAttribLocation(this.decalProgram, 'aShade'),
+    };
+    this.decalUniforms = {};
+    for (const name of ['uViewProj', 'uCamPos', 'uTexture', 'uFogDensity', 'uFlicker']) {
+      this.decalUniforms[name] = gl.getUniformLocation(this.decalProgram, name);
     }
 
     this.atlasCanvas = buildAtlas();
@@ -187,6 +251,45 @@ export class Renderer {
     this.dynCount = 0;
   }
 
+  /**
+   * Uploads (or re-uploads) the wall-writing texture from a canvas.
+   * Uses texture unit 1 to avoid disturbing the wall atlas on unit 0.
+   */
+  setDecalTexture(source: HTMLCanvasElement): void {
+    const gl = this.gl;
+    this.decalTexture ??= gl.createTexture();
+    // Upload on unit 1 (the decal pass's unit) so the wall atlas binding on
+    // unit 0 is never disturbed - binding here on the active unit 0 replaced
+    // the atlas with this mostly-transparent canvas and blacked the world out.
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.decalTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.activeTexture(gl.TEXTURE0);
+  }
+
+  /**
+   * Replaces the decal mesh (vertex layout: position(3), uv(2), shade(1)).
+   * The decal pass draws wall writings as alpha-blended quads over the walls.
+   */
+  setDecalMesh(vertices: Float32Array, indices: Uint16Array): void {
+    const gl = this.gl;
+    this.decalVbo ??= gl.createBuffer();
+    this.decalIbo ??= gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.decalVbo);
+    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.DYNAMIC_DRAW);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.decalIbo);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.DYNAMIC_DRAW);
+    this.decalCount = indices.length;
+  }
+
+  clearDecalMesh(): void {
+    this.decalCount = 0;
+  }
+
   resize(): void {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.floor(this.canvas.clientWidth * dpr);
@@ -218,12 +321,62 @@ export class Renderer {
     gl.uniform1f(this.uniforms.uFlicker!, flicker);
     gl.uniform1i(this.uniforms.uAtlas!, 0);
 
+    // Re-assert the atlas on unit 0 every frame so no upload elsewhere can
+    // leave the opaque pass sampling the wrong texture.
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.atlasTexture);
+
     for (const mesh of chunks) {
       this.drawMesh(mesh.vbo, mesh.ibo, mesh.indexCount);
     }
     if (this.dynCount > 0 && this.dynVbo && this.dynIbo) {
       this.drawMesh(this.dynVbo, this.dynIbo, this.dynCount);
     }
+    this.drawDecals(viewProj, camera, flicker);
+  }
+
+  /** Alpha-blended wall-writing pass, drawn over the opaque geometry. */
+  private drawDecals(viewProj: Float32Array, camera: Camera, flicker: number): void {
+    if (this.decalCount === 0 || !this.decalVbo || !this.decalIbo || !this.decalTexture) {
+      return;
+    }
+    const gl = this.gl;
+    gl.useProgram(this.decalProgram);
+    gl.uniformMatrix4fv(this.decalUniforms.uViewProj!, false, viewProj);
+    gl.uniform3f(this.decalUniforms.uCamPos!, camera.x, camera.y, camera.z);
+    gl.uniform1f(this.decalUniforms.uFogDensity!, this.fogDensity);
+    gl.uniform1f(this.decalUniforms.uFlicker!, flicker);
+    gl.uniform1i(this.decalUniforms.uTexture!, 1);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.decalTexture);
+    gl.activeTexture(gl.TEXTURE0);
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+
+    // Stale arrays left enabled by the opaque pass can point past the small
+    // decal buffer, which is an INVALID_OPERATION on strict implementations.
+    for (const a of Object.values(this.attribs)) {
+      gl.disableVertexAttribArray(a);
+    }
+
+    const stride = FLOATS_PER_DECAL_VERTEX * 4;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.decalVbo);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.decalIbo);
+    gl.vertexAttribPointer(this.decalAttribs.aPosition!, 3, gl.FLOAT, false, stride, 0);
+    gl.vertexAttribPointer(this.decalAttribs.aUv!, 2, gl.FLOAT, false, stride, 12);
+    gl.vertexAttribPointer(this.decalAttribs.aShade!, 1, gl.FLOAT, false, stride, 20);
+    for (const a of Object.values(this.decalAttribs)) {
+      gl.enableVertexAttribArray(a);
+    }
+    gl.drawElements(gl.TRIANGLES, this.decalCount, gl.UNSIGNED_SHORT, 0);
+    for (const a of Object.values(this.decalAttribs)) {
+      gl.disableVertexAttribArray(a);
+    }
+
+    gl.depthMask(true);
+    gl.disable(gl.BLEND);
   }
 
   private drawMesh(vbo: WebGLBuffer, ibo: WebGLBuffer, indexCount: number): void {

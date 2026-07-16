@@ -1,8 +1,8 @@
 {
   "name": "vscode-backviews",
   "displayName": "BackViews",
-  "description": "First-person backrooms explorer rendered inside a VSCode webview, driven by the cmd-backedges infinite maze generation API.",
-  "version": "0.0.1-alpha",
+  "description": "First-person backrooms explorer rendered inside a VSCode webview, driven by the cmd-backedges infinite maze generation API. While Copilot works, its chat responses and job status are ghost-written on the walls with a camcorder token counter on the HUD.",
+  "version": "0.1.0-alpha",
   "publisher": "isocialPractice",
   "author": "John Haugabook",
   "license": "MIT",
@@ -26,10 +26,40 @@
   "icon": "media/icon.png",
   "main": "./dist/extension.js",
   "activationEvents": [
+    "onLanguageModelTool:backviews_reportJob",
     "onCommand:backviews.open",
     "onCommand:backviews.relocate"
   ],
   "contributes": {
+    "languageModelTools": [
+      {
+        "name": "backviews_reportJob",
+        "displayName": "BackViews Job Reporter",
+        "toolReferenceName": "backviewsReport",
+        "canBeReferencedInPrompt": true,
+        "icon": "$(edit)",
+        "userDescription": "Writes the agent's current job status on the backrooms walls and drives the HUD token counter.",
+        "modelDescription": "Report your current job status to the BackViews game running in this workspace. Call this when you start working on a chat request, again whenever the work moves to a new step, and once more with done=true when the job is finished. The status text is scrawled on the backrooms walls and the token count drives a camcorder-style counter on the game's HUD.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "description": "Short status text to scrawl on the walls (e.g. 'reading the codebase', 'rewriting the parser')"
+            },
+            "tokens": {
+              "type": "number",
+              "description": "Approximate tokens consumed by the current job so far"
+            },
+            "done": {
+              "type": "boolean",
+              "description": "Set true when the job is finished; the walls stop updating and the counter fades out"
+            }
+          },
+          "required": ["status"]
+        }
+      }
+    ],
     "commands": [
       {
         "command": "backviews.open",
@@ -173,6 +203,11 @@
           ],
           "default": "random",
           "description": "Monster body plan."
+        },
+        "backviews.copilotGhostWriter": {
+          "type": "boolean",
+          "default": true,
+          "description": "Copilot ghost-writer: while Copilot works, scrawl its chat responses and job status live on nearby walls in a messy ink script, and run a camcorder-style token counter under the HUD battery icon. One toggle for the whole feature."
         }
       }
     }
@@ -182,7 +217,7 @@
     "watch": "node build.mjs --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "icons": "node scripts/make-icon.mjs",
-    "pre:publish": "sed -i \"s/logo.svg/logo.png/\" README.md && vsce package && sed -i \"s/logo.png/logo.svg/\" README.md ",
+    "pre:publish": "vsce package",
     "vscode:prepublish": "npm run build"
   },
   "devDependencies": {

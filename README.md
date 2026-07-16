@@ -2,7 +2,7 @@
 
 <div align="center">
   <br />
-  <a title="Header logo" href="http://github.com/isocialPractice/vscode-backviews"><img src="https://raw.githubusercontent.com/isocialPractice/vscode-backviews/main/media/logo.svg" alt="BackViews Logo" width="75%" /></a>
+  <a title="Header logo" href="http://github.com/isocialPractice/vscode-backviews"><img src="https://raw.githubusercontent.com/isocialPractice/vscode-backviews/main/media/logo.png" alt="BackViews Logo"/></a>
   <br/><br/>
 
   `Ctrl + click` to **[▶ Play `vscode-backviews` on GitHub Pages](https://isocialpractice.github.io/vscode-backviews/)**
@@ -26,6 +26,7 @@ do not end.
 - [Getting Started](#getting-started)
 - [Game Play](#game-play)
 - [Settings](#settings)
+- [Copilot Ghost-Writer](#copilot-ghost-writer)
 - [API Quick Overview](#api-quick-overview)
 - [Architecture](#architecture)
 
@@ -76,10 +77,10 @@ To run the browser demo locally:
    ```bash
    # Using PHP
    php -S localhost:9090
-   
+
    # Using Python
    python -m http.server 9090
-   
+
    # Using Node.js http-server
    npx http-server -p 9090
    ```
@@ -168,6 +169,7 @@ in-game menu (menu changes persist back to your user settings).
 | `backviews.monsterSpawnMin` | `1` | Earliest spawn, minutes after the world starts |
 | `backviews.monsterSpawnMax` | `5` | Latest spawn, minutes after the world starts |
 | `backviews.monsterForm` | `random` | Body plan: `spider`, `humanoid`, `cloud`, or `random` per spawn |
+| `backviews.copilotGhostWriter` | `true` | Ghost-write Copilot chat and job status on the walls, plus a HUD token counter |
 
 The material preset picks a pre-built wall set with one click, and the two sliders adjust its
 adjustable elements: hue rotates the material's color cast around the wheel, and brightness
@@ -187,6 +189,41 @@ panel opens:
 Swap any of these files to re-skin the game; if a file is missing or fails to load, that
 surface falls back to its procedural texture. Wallpaper zones still recolor the photo
 wallpaper and switch it to a darkened variant, and the hue/brightness sliders apply on top.
+
+## Copilot Ghost-Writer
+
+When Copilot is working in the same workspace, the halls start writing back. Its chat
+responses and job status are scrawled onto the walls in a messy ink script, and a
+camcorder-style token counter runs under the HUD battery. The whole feature lives behind a
+single toggle, `backviews.copilotGhostWriter` (on by default, and switchable live from the
+in-game menu under **Copilot**). Turning it off wipes any writing already on the walls.
+
+There are two surfaces and three ways the game learns what Copilot is doing:
+
+- **The walls.** Older chat exchanges are stamped statically on walls around you, one wall
+  per exchange. The newest response is *ghost-written*: characters materialize onto the wall
+  ahead as the answer streams in, and the text flows onto the next free wall as you walk and
+  as each wall fills. Each writing gets its own handwriting jitter, ink drips, splatter, and
+  marker sheen, seeded so already-revealed characters stay put while new ones appear.
+- **The HUD.** The token count of the current response drives a `TKN 000000` odometer under
+  the battery icon that rolls toward the live value, with a blinking access mark while the
+  job runs and a short linger after it finishes.
+
+The status feeds, in order of precedence when a panel opens:
+
+1. **Chat session mirror (automatic).** The extension reads VSCode's own chat session store
+   for the workspace and mirrors the most recent session onto the walls. Nothing to wire up:
+   open a panel while a chat is streaming and the response ghost-writes itself.
+2. **Language model tool `backviews_reportJob`.** An agent can call this tool as it works to
+   push a `status`, `tokens`, and `done` flag. Reference it from a
+   `.github/copilot-instructions.md` so the agent reports each step.
+3. **Status file / command.** Write `.copilot/backviews-job.json` in the workspace root
+   (`{ "working": true, "status": "...", "tokens": 1234 }`), or call the
+   `backviews.reportJob` command programmatically from a task, hook, or another extension. A
+   status file that stops updating goes stale and reads as idle.
+
+All three routes are best-effort and fault-tolerant: a missing file, an unparseable session,
+or an absent language-model API simply leaves the walls quiet.
 
 ## API Quick Overview
 
@@ -246,28 +283,37 @@ Two bundles from one TypeScript tree:
 
 ```text
 src/
-  extension.ts          Extension host: panel lifecycle, CSP, settings persistence
-  shared/settings.ts    Settings shape + host/webview message protocol
+  extension.ts          Extension host: panel lifecycle, CSP, settings
+                        persistence, and the Copilot job/chat status mirror
+  shared/
+    settings.ts         Settings shape + host/webview message protocol
+    chatlog.ts          Parser for VSCode's chat session store into a
+                        wall-ready snapshot (json + jsonl set-op formats)
   webview/
     main.ts             Frame loop, camera shake, flicker, host messaging
     world.ts            cmd-backedges -> geometry: chunk meshes, collision,
                         wallpaper zones, lights, furniture, material presets
     monster.ts          Spawn scheduling, BFS stalking, body-plan meshes
     renderer.ts         Raw WebGL: one shader, atlas texturing, fog, chunk
-                        draws plus one dynamic mesh for the monster
+                        draws, one dynamic mesh for the monster, plus an
+                        alpha-blended decal pass for wall writing
+    graffiti.ts         Copilot ghost-writer: static history stamps and the
+                        live streaming response written onto wall decals
     textures.ts         Procedural canvas texture atlas, patched at runtime
                         with the photo materials from materials/
     input.ts            Keyboard + pointer-lock mouse
     menu.ts             Pause menu / settings / help overlay
     film.ts             1990 camcorder overlay: grain, vignette, tears, HUD,
-                        and the signal-lost static burst
+                        the HUD token counter, and the signal-lost static burst
 ```
 
 Flow:
 
 1. `extension.ts` opens a webview panel, injects `media/webview.js` under a strict CSP, and
-   exchanges typed messages: `config` and `relocate` inbound, `ready` and `updateSetting`
-   outbound.
+   exchanges typed messages: `config`, `relocate`, `jobStatus`, and `chatSession` inbound,
+   `ready` and `updateSetting` outbound. While the panel is open it polls the Copilot job
+   status file and the workspace chat session store, forwarding changes as `jobStatus` and
+   `chatSession` messages.
 2. `world.ts` wraps a `MazeGenerator` + `MazeSession` pair. As the player walks, 4x4-cell chunks
    inside the render distance are meshed (floor, ceiling, light panels, extruded solid edges,
    header bands where ceiling heights step down, and props) and uploaded; chunks out of range are
@@ -280,8 +326,14 @@ Flow:
 5. `monster.ts` sleeps until a randomized moment inside the spawn window, then walks the same
    passability grid as the player (breadth-first search toward the player's cell, recomputed as
    they move) and is rebuilt into the renderer's single dynamic mesh every frame.
-6. `film.ts` layers the camcorder look on a 2D canvas so the 3D pass stays simple, and cuts the
-   whole picture to static for a moment when the monster connects.
+6. `film.ts` layers the camcorder look on a 2D canvas so the 3D pass stays simple, cuts the
+   whole picture to static for a moment when the monster connects, and rolls the HUD token
+   counter from the job/chat snapshots.
+7. `graffiti.ts` turns the `jobStatus` and `chatSession` snapshots into wall writing. Ray
+   casts along the player's gaze find free walls; history exchanges are stamped statically
+   while the current response ghost-writes character by character into a shared canvas atlas,
+   uploaded to the renderer's decal pass. The whole subsystem is gated by
+   `backviews.copilotGhostWriter`.
 
 Since the maze, lights, zones, and props are all deterministic, the only state worth saving is
 the seed and the player's position, which the webview persists across panel hides and reloads.

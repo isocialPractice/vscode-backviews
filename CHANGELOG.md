@@ -4,7 +4,24 @@ All notable changes to this project will be documented in this file. The format 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.0.1-alpha] - 2026-07-16
+## [0.1.0-alpha] - 2026-07-16
+
+### Added
+
+- Copilot ghost-writer (`backviews.copilotGhostWriter`, on by default, one toggle for the
+  whole feature; also switchable live from the in-game menu under Copilot). While Copilot
+  works in the same workspace, its chat responses and job status are scrawled on nearby walls
+  in an ink script and a camcorder-style token counter rolls under the HUD battery icon.
+  - Wall writing: older chat exchanges are stamped statically on surrounding walls, and the
+    newest response is ghost-written character by character onto the wall ahead as it streams,
+    flowing onto the next free wall as the player moves and as each wall fills. Rendered
+    through a new alpha-blended decal pass in the WebGL renderer.
+  - HUD token counter: a `TKN` odometer that rolls toward the live token count with a blinking
+    access mark while the job runs and a short linger after it finishes.
+  - Three status routes, best-effort and fault-tolerant: an automatic mirror of VSCode's chat
+    session store, a `backviews_reportJob` language model tool an agent can call as it works,
+    and a polled `.copilot/backviews-job.json` status file plus a `backviews.reportJob`
+    command for tasks, hooks, or other extensions.
 
 ### Fixed
 

@@ -17,6 +17,44 @@ export const MATERIAL_PRESET_IDS: readonly MaterialPreset[] = [
 
 export const MONSTER_FORM_IDS: readonly MonsterForm[] = ['spider', 'humanoid', 'cloud', 'random'];
 
+/**
+ * A Copilot job snapshot, bridged in from the status file or the
+ * `backviews.reportJob` command. While `working` is true the status text is
+ * scrawled on the walls and the HUD shows a live token counter.
+ */
+export interface CopilotJob {
+  /** Whether the agent is actively working right now. */
+  working: boolean;
+  /** Short human-readable description of the current job step. */
+  status: string;
+  /** Tokens consumed by the current job so far. */
+  tokens: number;
+}
+
+export const IDLE_JOB: CopilotJob = { working: false, status: '', tokens: 0 };
+
+/** One completed Copilot Chat exchange, already trimmed for wall display. */
+export interface ChatExchange {
+  prompt: string;
+  response: string;
+}
+
+/**
+ * Snapshot of the workspace's most recent Copilot Chat session, read from
+ * VSCode's chat session store. History is written on walls statically; the
+ * current response is ghost-written live as it streams.
+ */
+export interface ChatSessionSnapshot {
+  /** Whether the newest response is still streaming. */
+  working: boolean;
+  /** Older exchanges (newest last), excluding the current response. */
+  history: ChatExchange[];
+  /** The newest response's text so far (clipped; grows while streaming). */
+  current: string;
+  /** Approximate tokens of the newest response (chars / 4). */
+  tokens: number;
+}
+
 export interface BackviewsSettings {
   /** Maze seed; 0 means "pick a random seed when the panel opens". */
   seed: number;
@@ -58,6 +96,13 @@ export interface BackviewsSettings {
   monsterSpawnMax: number;
   /** Monster body plan; `random` rolls a new form each spawn. */
   monsterForm: MonsterForm;
+  /**
+   * Copilot ghost-writer: while Copilot works, its chat responses and job
+   * status are scrawled live on nearby walls as they stream, and a camcorder
+   * token counter runs under the HUD battery. One toggle for the whole
+   * feature.
+   */
+  copilotGhostWriter: boolean;
 }
 
 export const DEFAULT_SETTINGS: BackviewsSettings = {
@@ -81,6 +126,7 @@ export const DEFAULT_SETTINGS: BackviewsSettings = {
   monsterSpawnMin: 1,
   monsterSpawnMax: 5,
   monsterForm: 'random',
+  copilotGhostWriter: true,
 };
 
 export type SettingValue = number | boolean | string;
@@ -88,7 +134,9 @@ export type SettingValue = number | boolean | string;
 /** Messages sent from the extension host into the webview. */
 export type HostMessage =
   | { type: 'config'; settings: BackviewsSettings }
-  | { type: 'relocate' };
+  | { type: 'relocate' }
+  | { type: 'jobStatus'; job: CopilotJob }
+  | { type: 'chatSession'; session: ChatSessionSnapshot };
 
 /** Messages sent from the webview back to the extension host. */
 export type WebviewMessage =

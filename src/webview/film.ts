@@ -4,14 +4,19 @@
  * blinking REC dot, tape counter, battery pips, and a burned-in timestamp.
  * Drawn on a 2D canvas layered above the WebGL view.
  */
+import { CopilotJob, IDLE_JOB } from '../shared/settings';
 
 const GRAIN_TILE = 160;
 const GRAIN_VARIANTS = 5;
 const GRAIN_FPS = 18;
 
+/** How long the token counter stays on screen after the job goes idle. */
+const JOB_LINGER_MS = 6000;
+
 export class FilmOverlay {
   grainEnabled = true;
   hudEnabled = true;
+  tokenCounterEnabled = true;
 
   private readonly ctx: CanvasRenderingContext2D;
   private readonly grainTiles: HTMLCanvasElement[] = [];
@@ -21,6 +26,11 @@ export class FilmOverlay {
   private tearUntil = 0;
   private burstUntil = 0;
   private readonly startedAt = Date.now();
+
+  private job: CopilotJob = { ...IDLE_JOB };
+  private jobLingerUntil = 0;
+  private shownTokens = 0;
+  private lastHudAt = 0;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
@@ -36,6 +46,15 @@ export class FilmOverlay {
   /** Cuts the picture to heavy static for a moment (the catch effect). */
   burst(now: number, durationMs = 1300): void {
     this.burstUntil = now + durationMs;
+  }
+
+  /**
+   * Feeds the HUD the latest Copilot job snapshot. The token count drives the
+   * HUD counter, which rolls toward the target value and lingers after the
+   * job finishes.
+   */
+  setJob(job: CopilotJob): void {
+    this.job = job;
   }
 
   render(now: number): void {
@@ -163,6 +182,8 @@ export class FilmOverlay {
     ctx.fillRect(w - pad - 32, pad + 26, 8, 8);
     ctx.fillRect(w - pad - 22, pad + 26, 8, 8);
 
+    this.renderTokenCounter(now, w, pad);
+
     // Burned-in timestamp, lower-left, camcorder date format.
     ctx.textAlign = 'left';
     const stamp = new Date();
@@ -176,6 +197,44 @@ export class FilmOverlay {
     ctx.fillText(text, pad, h - pad - 18);
 
     ctx.shadowBlur = 0;
+    ctx.textAlign = 'left';
+  }
+
+  /**
+   * Dynamic token counter for the current Copilot job, tucked under the
+   * battery icon like one more line of a 1990s Sony camcorder's on-screen
+   * display: blocky monospace digits that roll toward the live count, with a
+   * blinking access mark while the job is running.
+   */
+  private renderTokenCounter(now: number, w: number, pad: number): void {
+    if (!this.tokenCounterEnabled) {
+      return;
+    }
+    if (this.job.working) {
+      this.jobLingerUntil = now + JOB_LINGER_MS;
+    } else if (now > this.jobLingerUntil) {
+      this.shownTokens = 0;
+      return;
+    }
+
+    // Odometer roll: digits sweep toward the live value instead of jumping.
+    const dt = Math.min(0.2, (now - this.lastHudAt) / 1000 || 0.016);
+    this.lastHudAt = now;
+    const target = this.job.tokens;
+    const gap = target - this.shownTokens;
+    this.shownTokens =
+      Math.abs(gap) < 1 ? target : this.shownTokens + gap * Math.min(1, dt * 4);
+
+    const ctx = this.ctx;
+    const digits = String(Math.min(999_999, Math.round(this.shownTokens))).padStart(6, '0');
+    ctx.font = '16px "Courier New", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(235, 235, 225, 0.9)';
+    ctx.fillText(`TKN ${digits}`, w - pad, pad + 44);
+    // Access mark: the little block Sony decks blink during tape access.
+    if (this.job.working && Math.floor(now / 450) % 2 === 0) {
+      ctx.fillRect(w - pad - 108, pad + 46, 8, 11);
+    }
     ctx.textAlign = 'left';
   }
 }

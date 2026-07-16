@@ -5,6 +5,7 @@
  */
 import { BackviewsSettings, DEFAULT_SETTINGS, HostMessage, SettingValue, WebviewMessage } from '../shared/settings';
 import { FilmOverlay } from './film';
+import { WallWriting } from './graffiti';
 import { Input } from './input';
 import { Monster, MonsterConfig } from './monster';
 import { Camera, Renderer } from './renderer';
@@ -39,6 +40,7 @@ class Game {
   private settings: BackviewsSettings = { ...DEFAULT_SETTINGS };
   private readonly renderer: Renderer;
   private readonly film: FilmOverlay;
+  private readonly graffiti = new WallWriting();
   private readonly input: Input;
   private readonly menu: Menu;
   private readonly toast: HTMLElement;
@@ -107,6 +109,18 @@ class Game {
         this.applySettings(message.settings);
       } else if (message.type === 'relocate') {
         this.relocate();
+      } else if (message.type === 'jobStatus') {
+        this.film.setJob(message.job);
+        this.graffiti.setJob(message.job);
+      } else if (message.type === 'chatSession') {
+        // Chat sessions feed the same surfaces: response tokens drive the HUD
+        // counter, and the session text drives the wall writing.
+        this.film.setJob({
+          working: message.session.working,
+          status: '',
+          tokens: message.session.tokens,
+        });
+        this.graffiti.setSession(message.session);
       }
     });
     vscode.postMessage({ type: 'ready' });
@@ -173,6 +187,7 @@ class Game {
 
   private rebuildWorld(seed: number): void {
     this.world.invalidateChunks(this.renderer);
+    this.graffiti.reset(this.renderer);
     this.world = new World(seed);
     this.world.furnitureEnabled = this.settings.furniture;
     this.world.wallpaperShiftsEnabled = this.settings.wallpaperShifts;
@@ -222,6 +237,13 @@ class Game {
     this.settings = settings;
     this.film.grainEnabled = settings.filmGrain;
     this.film.hudEnabled = settings.vhsHud;
+    // The Copilot ghost-writer is one toggle over both surfaces: the HUD token
+    // counter and the wall writing. Turning it off wipes any writing in place.
+    this.film.tokenCounterEnabled = settings.copilotGhostWriter;
+    if (this.graffiti.enabled && !settings.copilotGhostWriter) {
+      this.graffiti.reset(this.renderer);
+    }
+    this.graffiti.enabled = settings.copilotGhostWriter;
     this.input.mouseLookEnabled = settings.mouseLook;
     // Fog closes in just before the mesh edge does.
     this.renderer.fogDensity = 2.6 / (settings.renderDistance * settings.renderDistance);
@@ -319,6 +341,7 @@ class Game {
       fovY: (72 * Math.PI) / 180,
     };
 
+    this.graffiti.update(now, this.world, this.px, this.py, this.yaw, this.renderer);
     const chunks = this.world.updateChunks(this.px, this.py, this.settings.renderDistance, this.renderer);
     this.renderer.draw(chunks, camera, flicker);
     this.film.render(now);

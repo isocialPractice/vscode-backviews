@@ -284,6 +284,9 @@ export class Menu {
     card.appendChild(this.toggleRow('Wallpaper shifts', 'wallpaperShifts'));
     card.appendChild(this.sliderRow('Render distance', 'renderDistance', 6, 28, 1));
 
+    card.appendChild(this.heading('Copilot'));
+    card.appendChild(this.toggleRow('Ghost-writer on the walls', 'copilotGhostWriter'));
+
     const seedRow = document.createElement('div');
     seedRow.className = 'bv-row';
     const seedLabel = document.createElement('label');

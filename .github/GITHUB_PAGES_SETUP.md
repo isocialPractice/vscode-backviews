@@ -56,6 +56,12 @@ To manually trigger the deployment without pushing code:
 - Ensure `cmd-backedges` repository exists and is accessible
 - Check that Node.js version matches requirements (18+)
 - Verify `package.json` and dependencies are correct
+- If cache errors occur, the workflow uses `**/package-lock.json` glob pattern to find lockfiles
+
+**Cache dependency errors:**
+- The workflow uses a glob pattern (`**/package-lock.json`) to locate package-lock.json files
+- This prevents "unable to cache dependencies" errors when paths don't resolve exactly
+- If you see cache warnings, the build will still succeed as npm install runs regardless
 
 **Game doesn't load on Pages:**
 - Open browser console (F12) for error messages

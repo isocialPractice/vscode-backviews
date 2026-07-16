@@ -2,11 +2,10 @@
   "name": "vscode-backviews",
   "displayName": "BackViews",
   "description": "First-person backrooms explorer rendered inside a VSCode webview, driven by the cmd-backedges infinite maze generation API.",
-  "version": "0.0.0-alpha",
+  "version": "0.0.1-alpha",
   "publisher": "isocialPractice",
   "author": "John Haugabook",
   "license": "MIT",
-  "private": true,
   "repository": {
     "type": "git",
     "url": "https://github.com/isocialPractice/vscode-backviews.git"
@@ -26,6 +25,10 @@
   ],
   "icon": "media/icon.png",
   "main": "./dist/extension.js",
+  "activationEvents": [
+    "onCommand:backviews.open",
+    "onCommand:backviews.relocate"
+  ],
   "contributes": {
     "commands": [
       {
@@ -179,7 +182,7 @@
     "watch": "node build.mjs --watch",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "icons": "node scripts/make-icon.mjs",
-    "pre:publish": "vsce package",
+    "pre:publish": "sed -i \"s/logo.svg/logo.png/\" README.md && vsce package && sed -i \"s/logo.png/logo.svg/\" README.md ",
     "vscode:prepublish": "npm run build"
   },
   "devDependencies": {

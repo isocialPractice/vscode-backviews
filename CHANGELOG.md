@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file. The format 
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.1-alpha] - 2026-07-16
+
+### Fixed
+
+- Player collision glitch at open doorway jamb surfaces: resolved rapid back-and-forth motion
+  ("punched" or shaken feeling) when pressing into the extruded jamb face of an open doorway.
+  The collision resolver's wall-clamp was unbounded, so a player already standing legally
+  close to a jamb (having entered through the opening) would be snapped outward by a full
+  PLAYER_RADIUS every blocked frame, then allowed back the next, causing continuous
+  oscillation. Fixed by adding a `withinStep` bounds check that restricts the clamp target
+  to the span actually travelled in the current frame. All other wall collision is unchanged.
+
 ## [0.0.0-alpha] - 2026-07-15
 
 ### Added

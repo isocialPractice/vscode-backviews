@@ -43,7 +43,7 @@ const PLAYER_RADIUS = 0.24;
  * read as one solid slab. Kept below PLAYER_RADIUS so collision never lets
  * the camera reach the face.
  */
-const WALL_HALF_DEPTH = 0.06;
+export const WALL_HALF_DEPTH = 0.06;
 /** Doorway opening height as a fraction of the lower adjoining ceiling. */
 const DOOR_TOP_FRACTION = 0.84;
 /** Cells per streamed chunk side. */
@@ -153,6 +153,10 @@ export class World {
    * Applies a wall material preset plus its adjustable elements (hue rotation
    * in degrees and a brightness multiplier). Call invalidateChunks afterwards
    * so existing meshes pick the change up.
+   * 
+   * The preset determines the base tile and tint for all walls. Hue rotation
+   * lets players shift the wallpaper color, and brightness scales the overall
+   * material lightness without destroying the wear variation.
    */
   setMaterial(preset: MaterialPreset, hueShiftDeg: number, brightness: number): void {
     const base = MATERIAL_PRESETS[preset] ?? MATERIAL_PRESETS.classic;
@@ -160,6 +164,11 @@ export class World {
     this.wallBaseTint = hueRotate(base.tint, hueShiftDeg).map((v) =>
       Math.max(0, v * brightness),
     ) as [number, number, number];
+  }
+
+  /** Public light sample for decorations drawn outside the chunk mesher. */
+  lightAt(x: number, y: number): number {
+    return this.lightLevelAt(x, y);
   }
 
   stats(): WorldStats {
@@ -173,6 +182,10 @@ export class World {
   /**
    * Keeps the discrete MazeSession in step with the continuous player
    * position, so its move/enterCell events stay meaningful.
+   * 
+   * When the player crosses a cell boundary, this tries to move the session
+   * in the matching direction. If that fails (shouldn't happen - walls block
+   * both), it warps the session to match reality.
    */
   syncSession(px: number, py: number): void {
     const cx = Math.floor(px);
@@ -198,10 +211,26 @@ export class World {
   /**
    * Moves the player from (px, py) toward (px+dx, py+dy) in plane coordinates,
    * resolving collisions per axis so the player slides along walls.
+   * 
+   * This implements a sweep-and-clamp collision resolver: each axis is tested
+   * independently. If the desired position is blocked, the coordinate is
+   * clamped to the nearest wall surface (within the motion delta to avoid
+   * teleport-like jumps). This creates smooth wall-sliding behavior common in
+   * first-person games.
    */
   moveResolved(px: number, py: number, dx: number, dy: number): { x: number; y: number } {
     let x = px;
     let y = py;
+
+    // A blocked axis clamps to the wall plane instead of stopping dead, so
+    // motion stays smooth - but the clamp must stay inside the span actually
+    // travelled this step. Near doorway jambs the player can legitimately
+    // stand closer to the wall line than PLAYER_RADIUS (having arrived
+    // through the opening); an unbounded clamp would then yank them back to
+    // radius distance in one frame, which reads as being shoved.
+    // RESOLUTION: withinStep is the fix for the doorway jamb oscillation glitch.
+    const withinStep = (from: number, to: number, v: number): boolean =>
+      v >= Math.min(from, to) - 1e-9 && v <= Math.max(from, to) + 1e-9;
 
     const tryAxis = (nx: number, ny: number, axis: 'x' | 'y'): void => {
       if (this.canOccupy(nx, ny)) {
@@ -209,18 +238,19 @@ export class World {
         y = ny;
         return;
       }
-      // Clamp to the wall plane instead of stopping dead, so motion stays smooth.
       if (axis === 'x') {
         const cx = Math.floor(x);
         const clamped = nx > x ? cx + 1 - PLAYER_RADIUS - 1e-4 : cx + PLAYER_RADIUS + 1e-4;
-        if (this.canOccupy(clamped, ny)) {
+        // withinStep: guard prevents snapping the player outward when already flush with a jamb.
+        if (withinStep(x, nx, clamped) && this.canOccupy(clamped, ny)) {
           x = clamped;
           y = ny;
         }
       } else {
         const cy = Math.floor(y);
         const clamped = ny > y ? cy + 1 - PLAYER_RADIUS - 1e-4 : cy + PLAYER_RADIUS + 1e-4;
-        if (this.canOccupy(nx, clamped)) {
+        // withinStep: same guard on the Y axis.
+        if (withinStep(y, ny, clamped) && this.canOccupy(nx, clamped)) {
           x = nx;
           y = clamped;
         }
@@ -235,6 +265,11 @@ export class World {
   /**
    * Whether a player disc at (x, y) fits: each corner of its bounding square
    * must be reachable from the center cell through open edges only.
+   * 
+   * This implements circle-vs-grid collision by checking the four corners of
+   * the circle's bounding box. Each corner cell must be connected to the
+   * player's center cell via a valid path of open edges (either directly if
+   * they're adjacent, or through an intermediate cell at a diagonal).
    */
   private canOccupy(x: number, y: number): boolean {
     const cx = Math.floor(x);
@@ -246,17 +281,21 @@ export class World {
         if (ccx === cx && ccy === cy) {
           continue;
         }
+        // Check connectivity via cardinal directions
         const dirX: Direction | null = ccx > cx ? 'east' : ccx < cx ? 'west' : null;
         const dirY: Direction | null = ccy > cy ? 'south' : ccy < cy ? 'north' : null;
         if (dirX && !dirY) {
+          // Horizontal neighbor: direct edge check
           if (!this.generator.isPassable(cx, cy, dirX)) {
             return false;
           }
         } else if (dirY && !dirX) {
+          // Vertical neighbor: direct edge check
           if (!this.generator.isPassable(cx, cy, dirY)) {
             return false;
           }
         } else if (dirX && dirY) {
+          // Diagonal corner: must be reachable via X-then-Y or Y-then-X
           const viaX =
             this.generator.isPassable(cx, cy, dirX) && this.generator.isPassable(ccx, cy, dirY);
           const viaY =
@@ -272,6 +311,14 @@ export class World {
 
   // --- Lights ----------------------------------------------------------------
 
+  /**
+   * Determines light state for a cell: on, dead, or flickering.
+   * Lights live on a 3-cell lattice (offset to [1,1] within the pattern).
+   * Returns null for cells that have no light fixture.
+   * 
+   * Dead lights (12% chance) never illuminate. Flickering lights (8% chance)
+   * pulse erratically. The rest stay on with the global flicker hum.
+   */
   private lightState(cx: number, cy: number): LightState | null {
     const mod = (n: number, m: number): number => ((n % m) + m) % m;
     if (mod(cx, LIGHT_LATTICE) !== 1 || mod(cy, LIGHT_LATTICE) !== 1) {

@@ -18,9 +18,10 @@ The GitHub Actions workflow (`.github/workflows/deploy-pages.yml`) automatically
 
 1. Triggers on push to `main` branch or manual workflow dispatch
 2. Checks out both `vscode-backviews` and `cmd-backedges` repositories
-3. Installs dependencies with `npm install`
-4. Builds the webview bundle with `npm run build`
-5. Prepares deployment directory with:
+3. Sets up Node.js 20
+4. Installs dependencies with `npm install`
+5. Builds the webview bundle with `npm run build`
+6. Prepares deployment directory with:
    - `index.html` (browser game launcher)
    - `media/` folder (webview.js bundle, logo, icon)
    - `materials/` folder (wallpaper, ceiling, carpet textures)
@@ -54,14 +55,13 @@ To manually trigger the deployment without pushing code:
 
 **Build fails:**
 - Ensure `cmd-backedges` repository exists and is accessible
-- Check that Node.js version matches requirements (18+)
+- Check that Node.js version is 18 or newer (workflow uses Node 20)
 - Verify `package.json` and dependencies are correct
-- If cache errors occur, the workflow uses `**/package-lock.json` glob pattern to find lockfiles
 
-**Cache dependency errors:**
-- The workflow uses a glob pattern (`**/package-lock.json`) to locate package-lock.json files
-- This prevents "unable to cache dependencies" errors when paths don't resolve exactly
-- If you see cache warnings, the build will still succeed as npm install runs regardless
+**Note on caching:**
+- The workflow does not use npm caching to avoid path resolution issues
+- This ensures reliable builds without cache dependency errors
+- Build time is acceptable without caching for this project size
 
 **Game doesn't load on Pages:**
 - Open browser console (F12) for error messages

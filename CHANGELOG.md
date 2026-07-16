@@ -16,8 +16,8 @@ All notable changes to this project will be documented in this file. The format 
 
 ### Fixed
 
-- GitHub Actions workflow cache dependency path now uses glob pattern (`**/package-lock.json`) 
-  to prevent "unable to cache dependencies" errors during deployment
+- GitHub Actions workflow updated to Node 20 (avoiding Node 18 deprecation warnings)
+- Removed npm caching from workflow to prevent "unable to cache dependencies" errors
 
 ### Added (Core Features)
 

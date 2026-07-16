@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="BackViews - A first-person backrooms explorer. Endless procedurally generated yellow-wallpapered halls with a 1990s camcorder aesthetic.">
+  <meta name="keywords" content="backrooms, procedural generation, game, webview, maze, browser">
+  <meta name="author" content="John Haugabook">
+  <title>BackViews - Enter the Backrooms</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #16181b;
+    }
+
+    #app {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    #loading-screen {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, #1f2328 0%, #2d333b 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      color: #f0f2f3;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      transition: opacity 0.5s ease;
+    }
+
+    #loading-screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .loading-logo {
+      max-width: 400px;
+      width: 80%;
+      margin-bottom: 2rem;
+      filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        opacity: 0.8;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 1;
+        transform: scale(1.02);
+      }
+    }
+
+    .loading-text {
+      font-size: 1.2rem;
+      margin-bottom: 1.5rem;
+      text-align: center;
+      opacity: 0.9;
+    }
+
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(212, 165, 116, 0.3);
+      border-top-color: #d4a574;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-hint {
+      margin-top: 2rem;
+      font-size: 0.9rem;
+      opacity: 0.7;
+      text-align: center;
+      max-width: 500px;
+      padding: 0 1rem;
+    }
+
+    #error-screen {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: #1f2328;
+      color: #f0f2f3;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      padding: 2rem;
+      overflow: auto;
+      z-index: 10000;
+    }
+
+    #error-screen.show {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .error-title {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+      color: #d4a574;
+    }
+
+    .error-message {
+      font-size: 1rem;
+      margin-bottom: 1rem;
+      text-align: center;
+      max-width: 600px;
+    }
+
+    .error-details {
+      background: #2d333b;
+      padding: 1rem;
+      border-radius: 6px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.9rem;
+      max-width: 800px;
+      overflow-x: auto;
+      margin-top: 1rem;
+    }
+
+    .github-link {
+      margin-top: 2rem;
+      padding: 0.75rem 1.5rem;
+      background: #d4a574;
+      color: #1f2328;
+      text-decoration: none;
+      border-radius: 6px;
+      font-weight: 600;
+      transition: background 0.2s ease;
+    }
+
+    .github-link:hover {
+      background: #e6b89a;
+    }
+  </style>
+</head>
+<body>
+  <div id="loading-screen">
+    <img src="media/logo.png" alt="BackViews Logo" class="loading-logo" onerror="this.style.display='none'">
+    <div class="loading-text">Entering the Backrooms...</div>
+    <div class="loading-spinner"></div>
+    <div class="loading-hint">
+      Click the view to capture mouse.<br>
+      WASD or arrows to move, mouse to look, M or ESC for menu.
+    </div>
+  </div>
+
+  <div id="error-screen">
+    <div class="error-title">Failed to Load</div>
+    <div class="error-message" id="error-message">
+      The game bundle could not be loaded. Make sure webview.js exists in the media folder.
+    </div>
+    <div class="error-details" id="error-details"></div>
+    <a href="https://github.com/isocialPractice/vscode-backviews" class="github-link" target="_blank">
+      View Project on GitHub
+    </a>
+  </div>
+
+  <div id="app"></div>
+
+  <script>
+    window.__BACKVIEWS_MATERIALS__ = {
+      wallpaper: 'materials/wallpaper.jpg',
+      ceiling: 'materials/ceiling.jpg',
+      carpet: 'materials/carpet.jpg'
+    };
+
+    window.acquireVsCodeApi = function() {
+      const state = {
+        seed: 0,
+        px: 0.5,
+        py: 0.5,
+        yaw: 0
+      };
+
+      return {
+        postMessage: function(message) {
+          if (message.type === 'ready') {
+            setTimeout(() => {
+              window.postMessage({
+                type: 'config',
+                settings: {
+                  seed: 0,
+                  moveSpeed: 2.2,
+                  renderDistance: 14,
+                  cameraShake: true,
+                  filmGrain: true,
+                  vhsHud: true,
+                  furniture: true,
+                  wallpaperShifts: false,
+                  mouseLook: true,
+                  invertTurn: false,
+                  invertStrafe: false,
+                  invertForward: false,
+                  materialPreset: 'classic',
+                  materialHueShift: 0,
+                  materialBrightness: 1,
+                  monsterEnabled: true,
+                  monsterSpeed: 2.6,
+                  monsterSpawnMin: 1,
+                  monsterSpawnMax: 5,
+                  monsterForm: 'random'
+                }
+              }, '*');
+            }, 100);
+          } else if (message.type === 'updateSetting') {
+            console.log('Setting update:', message.key, message.value);
+          }
+        },
+        getState: function() {
+          try {
+            const stored = localStorage.getItem('backviews-state');
+            return stored ? JSON.parse(stored) : undefined;
+          } catch (e) {
+            return undefined;
+          }
+        },
+        setState: function(newState) {
+          try {
+            state.seed = newState.seed;
+            state.px = newState.px;
+            state.py = newState.py;
+            state.yaw = newState.yaw;
+            localStorage.setItem('backviews-state', JSON.stringify(newState));
+          } catch (e) {
+            console.warn('Failed to persist state:', e);
+          }
+        }
+      };
+    };
+
+    const loadingScreen = document.getElementById('loading-screen');
+    const errorScreen = document.getElementById('error-screen');
+    const errorMessage = document.getElementById('error-message');
+    const errorDetails = document.getElementById('error-details');
+
+    console.log('[BackViews] Initializing browser version...');
+    console.log('[BackViews] Materials:', window.__BACKVIEWS_MATERIALS__);
+
+    function showError(message, details) {
+      console.error('[BackViews] Error:', message);
+      if (details) console.error('[BackViews] Details:', details);
+      loadingScreen.classList.add('hidden');
+      errorScreen.classList.add('show');
+      errorMessage.textContent = message;
+      if (details) {
+        errorDetails.textContent = details;
+        errorDetails.style.display = 'block';
+      }
+    }
+
+    const script = document.createElement('script');
+    script.src = 'media/webview.js';
+    script.async = false;
+    
+    script.onload = function() {
+      console.log('[BackViews] Webview bundle loaded successfully');
+      setTimeout(() => {
+        const app = document.getElementById('app');
+        if (app && app.children.length > 0) {
+          console.log('[BackViews] Game initialized, hiding loading screen');
+          loadingScreen.classList.add('hidden');
+        } else {
+          console.warn('[BackViews] Game may not have initialized properly');
+          setTimeout(() => {
+            loadingScreen.classList.add('hidden');
+          }, 2000);
+        }
+      }, 1000);
+    };
+
+    script.onerror = function(e) {
+      showError(
+        'Failed to load the game bundle (media/webview.js).',
+        'Make sure you have run "npm install && npm run build" to generate the webview bundle.\n\n' +
+        'The bundle should be located at: media/webview.js\n\n' +
+        'If the file is missing, run:\n  cd vscode-backviews\n  npm install\n  npm run build'
+      );
+    };
+
+    document.head.appendChild(script);
+
+    window.addEventListener('error', function(e) {
+      if (!errorScreen.classList.contains('show')) {
+        showError(
+          'An error occurred while initializing the game.',
+          e.message + '\n\nFile: ' + e.filename + '\nLine: ' + e.lineno
+        );
+      }
+    });
+  </script>
+</body>
+</html>

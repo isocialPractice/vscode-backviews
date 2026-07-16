@@ -1,9 +1,12 @@
 # VSCode BackViews
 
-<p align="center">
+<div align="center">
   <br />
-  <a title="Header logo" href="http://github.com/isocialPractice/vscode-backviews"><img src="https://raw.githubusercontent.com/isocialPractice/vscode-backviews/main/media/logo.png" alt="BackViews Logo" width="50%" /></a>
-</p>
+  <a title="Header logo" href="http://github.com/isocialPractice/vscode-backviews"><img src="https://raw.githubusercontent.com/isocialPractice/vscode-backviews/main/media/logo.svg" alt="BackViews Logo" width="75%" /></a>
+  <br/><br/>
+
+  `Ctrl + click` to **[▶ Play `vscode-backviews` on GitHub Pages](https://isocialpractice.github.io/vscode-backviews/)**
+</div>
 
 A first-person backrooms explorer that runs inside a VSCode webview. Endless yellow-wallpapered
 halls under humming fluorescent panels, drop-tile ceilings, and worn office carpet, filmed

@@ -38,7 +38,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: vscode-backviews
-        run: npm ci
+        run: npm install
 
       - name: Build webview bundle
         working-directory: vscode-backviews
